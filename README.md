@@ -1,83 +1,84 @@
-# Users Service
+# 👤 User Service
 
-Users Service is a Node.js microservice for user management. It provides endpoints for user authentication, registration, profile management, and more. This service interacts with Firebase Authentication for user authentication and uses a PostgreSQL database to store user data.
+A Node.js microservice for user registration and login. Firebase Authentication owns credentials;
+PostgreSQL stores the user profile. If Firebase rejects a new user, the profile row is rolled back so the
+two stores never drift apart.
 
-## Features
+![CI](https://github.com/Ficabral10/User-service/actions/workflows/ci.yml/badge.svg)
+![Node.js](https://img.shields.io/badge/Node.js-20-339933?logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-000000?logo=express&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![Firebase](https://img.shields.io/badge/Firebase_Auth-FFCA28?logo=firebase&logoColor=black)
 
-- User registration
-- User authentication (login)
-- Profile management (update user details)
-- Middleware for parameter validation
+## Architecture
 
-## Technologies Used
-
-- Node.js
-- Express.js
-- Firebase Authentication
-- PostgreSQL
-- Microservices architecture
-- Middleware for parameter validation
-
-## Installation
-
-1. Clone the repository:
-
-   ```bash
-   git clone https://github.com/devmaiko/users-service-js.git
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   cd users-service
-   npm install
-   ```
-
-3. Set up Firebase Authentication and PostgreSQL database. Update the configuration accordingly.
-
-4. Run the service:
-
-   ```bash
-   npm start
-   ```
-
-## Configuration
-
-The service requires configuration for Firebase Authentication and PostgreSQL database. You can provide configuration using environment variables or configuration files.
-
-### Firebase Authentication Configuration
-
-```bash
-FIREBASE_API_KEY=<your-firebase-api-key>
-FIREBASE_AUTH_DOMAIN=<your-firebase-auth-domain>
-FIREBASE_PROJECT_ID=<your-firebase-project-id>
+```
+client ──► Express ──► validator middleware ──► UserController ──┬──► Firebase Auth  (email + password)
+                         (fastest-validator)                     └──► PostgreSQL     (profile, via Sequelize)
 ```
 
-### PostgreSQL Configuration
+- **Passwords never touch the database.** Only Firebase sees them; Postgres holds name and email.
+- **Request validation** runs before any handler: malformed emails, empty names or passwords under
+  6 characters get a `422` with the list of problems.
+- **Consistent errors:** `409` for a duplicate email, `401` for bad credentials, `{ "error": "<code>" }` bodies.
+
+## API
+
+| Method | Path | Body | Success |
+|---|---|---|---|
+| `GET` | `/health` | | `200 { "status": "ok" }` |
+| `POST` | `/users` | `firstName`, `lastName`, `email`, `password` | `201` created profile |
+| `POST` | `/users/login` | `email`, `password` | `200 { "uid", "profile" }` |
 
 ```bash
-DB_HOST=<your-postgres-host>
-DB_PORT=<your-postgres-port>
-DB_USER=<your-postgres-username>
-DB_PASSWORD=<your-postgres-password>
-DB_DATABASE=<your-postgres-database>
+curl -X POST http://localhost:3002/users \
+  -H "Content-Type: application/json" \
+  -d '{"firstName":"Ana","lastName":"Silva","email":"ana@example.com","password":"secret123"}'
 ```
 
-## Usage
+## Run it
 
-The service exposes HTTP endpoints for user management operations. Here are some example endpoints:
+```bash
+git clone https://github.com/Ficabral10/User-service.git
+cd User-service
+npm install
 
-- `POST /users`: create user in database and firebase.
-- `POST /users/info`: get user info from firebase.
-![Alt Text](docs/image1users.png)
+cp .env.example .env        # add your Firebase web app config
+docker compose up -d        # local PostgreSQL on :5432
+npm run migrate             # create the Users table
+npm run dev                 # http://localhost:3002
+```
 
-## Middleware for Parameter Validation
+## Tests
 
-The service includes middleware to validate request parameters before processing them. This ensures that only valid data is accepted by the service. You can find the middleware in the `middlewares/validateParams.js` file.
+```bash
+npm test
+```
 
-## Contributing
+Jest + Supertest cover the endpoints, validation, the duplicate/credential error paths and the Firebase
+rollback. Firebase and the database are mocked, so tests run without either. They run on every push in
+GitHub Actions.
 
-Contributions are welcome! If you'd like to contribute to Users Service, please follow the standard GitHub flow: fork the repository, make changes, and submit a pull request.
+## Project structure
 
+```
+server.js                         Express app and routes
+src/routes/users/                 /users routes
+src/middleware/users/             request validation
+src/controllers/users/            registration and login logic
+src/models/userModel.js           Sequelize User model
+src/services/firebase.js          Firebase app (config from env)
+migrations/                       sequelize-cli migrations
+config/                           database connection and sequelize-cli config
+tests/                            Jest + Supertest suite
+```
 
-# User-service
+## Next steps
+
+- Verify Firebase ID tokens (Admin SDK) on protected routes instead of signing in server-side
+- Profile update and delete endpoints
+- OpenAPI spec and Swagger UI
+
+## License
+
+[MIT](LICENSE)

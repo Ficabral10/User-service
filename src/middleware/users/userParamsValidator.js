@@ -1,33 +1,30 @@
 const Validator = require('fastest-validator');
+
 const v = new Validator();
 
-class UserParamsValidator {
-    createUser(req, res, next) {
-        const schema = {
-            firstName: "string",
-            lastName: "string",
-            email: "string"
-        };
-        const check = v.compile(schema);
-        if (check(req.body).length) {
-            return res.status(422).json(check(req.body));
-        } else {
-            next();
-        }
-    };
+const createUserCheck = v.compile({
+    firstName: { type: 'string', empty: false },
+    lastName: { type: 'string', empty: false },
+    email: { type: 'email' },
+    password: { type: 'string', min: 6 },
+});
 
-    findByEmail(req, res, next) {
-        const schema = {
-            email: "string",
-            password: "string"
-        };
-        const check = v.compile(schema);
-        if (check(req.body).length) {
-            return res.status(422).json(check(req.body));
-        } else {
-            next();
+const loginCheck = v.compile({
+    email: { type: 'email' },
+    password: { type: 'string', empty: false },
+});
+
+function validate(check) {
+    return (req, res, next) => {
+        const result = check(req.body || {});
+        if (result !== true) {
+            return res.status(422).json({ errors: result });
         }
+        next();
     };
 }
 
-module.exports = new UserParamsValidator();
+module.exports = {
+    createUser: validate(createUserCheck),
+    login: validate(loginCheck),
+};
